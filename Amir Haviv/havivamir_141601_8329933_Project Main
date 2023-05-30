@@ -1,0 +1,156 @@
+import pandas as pd
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+
+url = "https://en.wikipedia.org/wiki/Wagner_Group#Activities"
+tables = pd.read_html(url)
+tables
+
+
+conflicts = tables[2]
+conflicts
+
+# A dictionary mapping conflicts to countries
+conflict_to_country = {
+    'War in Donbas': 'Ukraine',
+    'Syrian civil war': 'Syria',
+    'Syrian civil war – Battle of Khasham': 'Syria',
+    'Central African Republic Civil War': 'Central African Republic',
+    'Sudanese Revolution': 'Sudan',
+    'Insurgency in Cabo Delgado': 'Mozambique',
+    'Second Libyan Civil War': 'Libya',
+    'Mali War': 'Mali',
+    'Russian invasion of Ukraine': 'Ukraine'
+}
+
+#Convert Conflict column to a country name
+conflicts['Conflict'] = conflicts['Conflict'].map(conflict_to_country)
+
+#Rename 'Conflict' column to 'Country'
+conflicts.rename(columns={'Conflict': 'Country'}, inplace=True)
+
+#Convert Period column to datetime (assuming the first date in the period)
+conflicts['Period'] = pd.to_datetime(conflicts['Period'].str.split('–').str[0].str.strip())
+
+#Convert Wagner casualties to numerical (extracting only the first number if there's a range)
+conflicts['Wagner casualties'] = pd.to_numeric(conflicts['Wagner casualties'].str.split('[–-]', expand=True)[0].str.extract('(\d+)', expand=False))
+
+#Drop the Notes column
+conflicts.drop(columns=['Notes'], inplace=True)
+conflicts.loc[9, 'Wagner casualties'] = 9
+
+conflicts
+
+country_counts = conflicts.groupby('Country').count()['Period']
+
+#Read in the world map data
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+#Join the country counts to the map data
+world = world.join(country_counts, on='name').fillna(0)
+
+#Plot the map with a heatmap of country counts
+fig, ax = plt.subplots(figsize=(15, 10))
+world.plot(column='Period', cmap='Reds', linewidth=0.5, ax=ax, edgecolor='gray')
+ax.axis('off')
+plt.title('frequency of Group Casualties by Country')
+plt.show()
+
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+#Group by country and sum the casualties
+country_casualties = conflicts.groupby('Country')['Wagner casualties'].sum().reset_index()
+
+#Join the country casualties to the map data
+world = world.merge(country_casualties, left_on='name', right_on='Country', how='left').fillna(0)
+
+# Create a new column in the world dataframe that identifies whether each country is Russia or not
+world['is_russia'] = np.where(world['name'] == 'Russia', True, False)
+
+# Plot the map with a heatmap of country casualties, coloring Russia differently
+fig, ax = plt.subplots(figsize=(15, 10))
+world.loc[world['is_russia'], :].plot(color='gray', linewidth=0.5, ax=ax)
+world.loc[~world['is_russia'], :].plot(column='Wagner casualties', cmap='Blues', linewidth=0.5, ax=ax, edgecolor='gray')
+ax.axis('off')
+plt.title('Number of Wagner Group Casualties by Country')
+plt.show()
+
+country_stats = conflicts.groupby('Country').agg({'Wagner casualties': 'sum', 'Period': 'count'}).reset_index()
+country_stats
+
+#Second part of the project
+
+#!pip install beautifulsoup4
+#!pip install requests
+
+import requests
+from bs4 import BeautifulSoup
+import re
+
+def count_word_variations(url, word_variations):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    text = soup.get_text().lower()
+    count = 0
+    for word_variation in word_variations:
+        count += len(re.findall(r'\b' + word_variation + r'\b', text))
+    return count
+
+# List of links
+links = ['https://home.treasury.gov/news/press-releases/jy1220',
+            'https://www.france24.com/en/europe/20211213-eu-imposes-sanctions-on-russian-mercenary-group-wagner-over-human-rights-abuses',
+            'https://www.voanews.com/a/us-sanctions-russian-wagner-group-urges-others-to-follow-/6927968.html',
+            'https://www.brookings.edu/blog/order-from-chaos/2022/02/08/russias-wagner-group-in-africa-influence-commercial-concessions-rights-violations-and-counterinsurgency-failure/',
+            'https://abcnews.go.com/International/International/wagner-group-brutal-russian-military-group-fighting-ukraine/story?id=96665326',
+            'https://www.politico.com/news/2023/01/20/white-house-sanctions-russias-wagner-group-00078807',
+            'https://www.rferl.org/a/eu-wagner-sanctions-africa-activities-russia/32288121.html',
+            'https://www.cnn.com/2023/01/26/politics/us-wagner-group-sanctions-russia/index.html',
+            'https://www.aljazeera.com/news/2022/5/4/car-hrw-denounces-alleged-abuses-of-russian-mercenary-group',
+            'https://thesentry.org/reports/cnn-central-african-republic/',
+            'https://www.ohchr.org/en/press-releases/2021/11/car-russian-wagner-group-harassing-and-intimidating-civilians-un-experts',
+            'https://www.euronews.com/2021/12/14/eu-sanctions-russia-s-wagner-group-over-human-rights-abuse-claims',
+            'https://www.consilium.europa.eu/en/press/press-releases/2023/04/13/russia-s-war-of-aggression-against-ukraine-wagner-group-and-ria-fan-added-to-the-eu-s-sanctions-list/'   
+]
+
+# Dictionary with the word variations
+word_variations = {
+    'violation': ['violation', 'violations', 'violated', 'violating'],
+    'abuse': ['abuse', 'abuses', 'abused', 'abusing'],
+    'torture': ['torture', 'tortures', 'tortured', 'torturing'],
+    'persecution': ['persecution', 'persecutions', 'persecuted', 'persecuting'],
+    'discrimination': ['discrimination', 'discriminations', 'discriminated', 'discriminating'],
+}
+
+# Create a new DataFrame with the counts for each word variation in each link
+data = []
+
+for link in links:
+    row = {'website': link}
+    for word, variations in word_variations.items():
+        row[word] = count_word_variations(link, variations)
+    data.append(row)
+
+df = pd.DataFrame(data)
+df
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Calculate summary statistics
+summary_stats = df.describe()
+summary_stats
+
+df['total_count'] = df['violation'] + df['abuse'] + df['torture'] + df['persecution'] + df['discrimination']
+ranked_df = df.sort_values(by='total_count', ascending=False)
+ranked_df
+
+sns.set(style='whitegrid')
+df.set_index('website', inplace=True)
+df[['violation', 'abuse', 'torture', 'persecution', 'discrimination']].plot(kind='bar', stacked=True, figsize=(10, 6))
+plt.ylabel('Count')
+plt.xlabel('Websites')
+plt.title('Word Categories Distribution Across Websites')
+plt.xticks(rotation=90)
+plt.show()

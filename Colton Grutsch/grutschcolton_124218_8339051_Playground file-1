@@ -1,0 +1,69 @@
+# import statements
+import requests
+from bs4 import BeautifulSoup
+import re
+import pandas as pd
+import numpy as np
+
+# Create an empty list to store the scraped data
+data = []
+
+# Loop through the first 10 pages of the website and scrape athlete, sponsor, school, sport, and details link names.
+# Range may be changed to scrape additional pages, up to 541.
+for i in range(1, 11):
+    url = f"https://nilcollegeathletes.com/deals?page={i}"
+    html = requests.get(url)
+    soup = BeautifulSoup(html.content, 'html.parser')
+
+    # Find all the li tags with similar scraped data
+    li_tags = soup.find_all('li', {'class': 'relative pl-0 pr-6 py-5 hover:bg-gray-50 sm:py-6'})
+
+    # Loop through the <li> tags to find athlete, sponsor, school, sport, and details link names
+    for li in li_tags:
+        athlete = li.find('a', href=re.compile('/athletes/([\w-]+)'))
+        sponsor = li.find('a', href=re.compile('/sponsors/|/agencies/'))
+        school = li.find('a', href=re.compile('/universities/'))
+        sport = li.find('div', {'class': 'flex text-gray-500 text-sm space-x-2'})
+        details = li.find('a', {'class': 'relative text-sm text-gray-500 hover:text-gray-900 font-medium'})
+
+        # Extract athlete's Instagram and Twitter links
+        if athlete is not None:
+            athlete_profile_url = 'https://nilcollegeathletes.com' + athlete['href']
+            athlete_html = requests.get(athlete_profile_url)
+            athlete_soup = BeautifulSoup(athlete_html.content, 'html.parser')
+            social_links = athlete_soup.find_all('a', href=re.compile('instagram.com/|twitter.com/'))
+            social_links_dict = {link.get('href').split('/')[-2]: link.get('href') for link in social_links}
+            instagram = social_links_dict.get('instagram', 'None')
+            twitter = social_links_dict.get('twitter', 'None')
+        else:
+            instagram = 'None'
+            twitter = 'None'
+
+        # Extract sponsor name, school name, sport name, and value
+        sponsor_name = sponsor.text.strip() if sponsor is not None else 'None'
+        school_name = re.findall(r'/universities/([^"]+)', str(school))[0].replace('-', ' ') if school is not None else 'None'
+        sport_name = sport.find_all('span')[-1].text.strip() if sport is not None else 'None'
+
+        # Follow the link in details and scrape the value
+        if details is not None:
+            details_url = 'https://nilcollegeathletes.com' + details['href']
+            details_html = requests.get(details_url)
+            details_soup = BeautifulSoup(details_html.content, 'html.parser')
+            value_tag = details_soup.find('dt', string='Value')
+            value = re.findall(r'\$?\d[\d,.]*', value_tag.find_next_sibling('dd').text.strip())[0].replace(',', '').replace('$', '') if value_tag is not None else 'NaN'
+        else:
+            value = 'NaN'
+
+        # Append the scraped data to the list
+        data.append({
+            'Athlete Name': athlete.text.strip() if athlete is not None else 'None',
+            'Sponsor Name': sponsor_name,
+            'School': school_name,
+            'Sport': sport_name,
+            'Value': value,
+            'Instagram': instagram,
+            'Twitter': twitter
+        })
+
+# Create a DataFrame with athlete, sponsor, school, sport names, and values
+nil = pd.DataFrame({'Athlete Name': athlete, 'Sponsor Name': sponsor, 'School': school, 'Sport': sport, 'Value': value, 'Instagram page': instagram, 'Twitter page': twitter})
