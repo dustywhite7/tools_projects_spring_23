@@ -8,7 +8,7 @@ from datetime import datetime
 
 def main():
     # Set up a Bing image search query using my Bing API
-    subscription_key = "f9962b455f0f4ba08c98e0f21c7dedd9"
+    subscription_key = ""
     search_url = "https://api.bing.microsoft.com/v7.0/images/search"
     search_query = "Captain Ibrahim Traore"
 
